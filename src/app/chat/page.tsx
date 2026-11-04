@@ -15,7 +15,7 @@ import {
   Search,
   BadgeCheck,
 } from "lucide-react";
-import { useTheme } co from "next-themes";
+import { useTheme } from "next-themes";
 import { format } from "date-fns";
 
 type Profile = {
@@ -75,7 +75,6 @@ export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Auth check
   useEffect(() => {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -93,7 +92,6 @@ export default function ChatPage() {
 
       setProfile(profileData);
 
-      // Update online status
       await supabase
         .from("profiles")
         .update({ status: "online", last_seen: new Date().toISOString() })
@@ -115,7 +113,6 @@ export default function ChatPage() {
     };
   }, []);
 
-  // Load rooms
   useEffect(() => {
     if (!user) return;
 
@@ -129,7 +126,6 @@ export default function ChatPage() {
         const roomList = data.map((d: any) => d.rooms).filter(Boolean);
         setRooms(roomList);
         if (roomList.length > 0 && !activeRoom) {
-          // Prefer official room if present
           const official = roomList.find((r: Room) => r.name === "Rulv Official");
           setActiveRoom(official || roomList[0]);
         }
@@ -151,7 +147,6 @@ export default function ChatPage() {
     };
   }, [user]);
 
-  // Load messages for active room
   useEffect(() => {
     if (!activeRoom) return;
 
@@ -273,7 +268,7 @@ export default function ChatPage() {
     const fileExt = file.name.split(".").pop();
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
-    const { co error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from("chat-files")
       .upload(fileName, file);
 
@@ -350,7 +345,6 @@ export default function ChatPage() {
 
   return (
     <div className="h-screen flex dark:bg-[#0a0a0a]">
-      {/* Sidebar */}
       <div className="w-80 border-r border-gray-200 dark:border-gray-800 flex flex-col bg-white dark:bg-[#111]">
         <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -424,7 +418,6 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* Chat area */}
       <div className="flex-1 flex flex-col">
         {activeRoom ? (
           <>
