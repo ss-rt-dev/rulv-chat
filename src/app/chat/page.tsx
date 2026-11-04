@@ -13,8 +13,9 @@ import {
   Moon,
   Sun,
   Search,
+  BadgeCheck,
 } from "lucide-react";
-import { useTheme } from "next-themes";
+import { useTheme } co from "next-themes";
 import { format } from "date-fns";
 
 type Profile = {
@@ -23,6 +24,8 @@ type Profile = {
   display_name: string | null;
   avatar_url: string | null;
   status: string;
+  is_official?: boolean;
+  role?: string;
 };
 
 type Room = {
@@ -42,6 +45,15 @@ type Message = {
   created_at: string;
   profiles?: Profile;
 };
+
+function OfficialBadge() {
+  return (
+    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-purple-600 text-white ml-1.5">
+      <BadgeCheck size={10} />
+      Official
+    </span>
+  );
+}
 
 export default function ChatPage() {
   const supabase = createClient();
@@ -92,7 +104,6 @@ export default function ChatPage() {
     getUser();
 
     return () => {
-      // Set offline on leave
       supabase.auth.getUser().then(({ data: { user } }) => {
         if (user) {
           supabase
@@ -118,13 +129,14 @@ export default function ChatPage() {
         const roomList = data.map((d: any) => d.rooms).filter(Boolean);
         setRooms(roomList);
         if (roomList.length > 0 && !activeRoom) {
-          setActiveRoom(roomList[0]);
+          // Prefer official room if present
+          const official = roomList.find((r: Room) => r.name === "Rulv Official");
+          setActiveRoom(official || roomList[0]);
         }
       }
     };
     loadRooms();
 
-    // Realtime for new rooms
     const channel = supabase
       .channel("rooms")
       .on(
@@ -154,7 +166,6 @@ export default function ChatPage() {
     };
     loadMessages();
 
-    // Realtime messages
     const channel = supabase
       .channel(`messages:${activeRoom.id}`)
       .on(
@@ -180,7 +191,6 @@ export default function ChatPage() {
       )
       .subscribe();
 
-    // Typing indicators
     const typingChannel = supabase
       .channel(`typing:${activeRoom.id}`)
       .on(
@@ -212,12 +222,10 @@ export default function ChatPage() {
     };
   }, [activeRoom, user]);
 
-  // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typingUsers]);
 
-  // Typing indicator
   const handleTyping = useCallback(async () => {
     if (!activeRoom || !user) return;
 
@@ -245,7 +253,6 @@ export default function ChatPage() {
     const content = newMessage.trim();
     setNewMessage("");
 
-    // Clear typing
     await supabase
       .from("typing")
       .delete()
@@ -266,7 +273,7 @@ export default function ChatPage() {
     const fileExt = file.name.split(".").pop();
     const fileName = `${user.id}/${Date.now()}.${fileExt}`;
 
-    const { error: uploadError } = await supabase.storage
+    const { co error: uploadError } = await supabase.storage
       .from("chat-files")
       .upload(fileName, file);
 
@@ -289,13 +296,6 @@ export default function ChatPage() {
   };
 
   const createPrivateChat = async (otherUser: Profile) => {
-    // Check if room already exists
-    const { data: existing } = await supabase
-      .from("room_members")
-      .select("room_id, rooms!inner(is_group)")
-      .eq("user_id", user.id);
-
-    // Simple approach: always create new for now
     const { data: room } = await supabase
       .from("rooms")
       .insert({
@@ -413,7 +413,10 @@ export default function ChatPage() {
                 {(profile.display_name || profile.username)?.[0]?.toUpperCase()}
               </div>
               <div className="flex-1 min-w-0">
-                <p className="font-medium truncate">{profile.display_name || profile.username}</p>
+                <p className="font-medium truncate flex items-center">
+                  {profile.display_name || profile.username}
+                  {profile.is_official && <OfficialBadge />}
+                </p>
                 <p className="text-xs text-green-500">Online</p>
               </div>
             </div>
@@ -447,8 +450,9 @@ export default function ChatPage() {
                       }`}
                     >
                       {!isMe && (
-                        <p className="text-xs font-medium text-brand-500 mb-1">
+                        <p className="text-xs font-medium text-brand-500 mb-1 flex items-center">
                           {msg.profiles?.display_name || msg.profiles?.username}
+                          {msg.profiles?.is_official && <OfficialBadge />}
                         </p>
                       )}
                       {msg.file_url ? (
@@ -482,7 +486,6 @@ export default function ChatPage() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Typing indicator */}
             {typingUsers.length > 0 && (
               <div className="px-6 pb-1 text-xs text-gray-500 dark:text-gray-400">
                 {typingUsers.join(", ")} {typingUsers.length === 1 ? "schreibt" : "schreiben"}...
@@ -528,7 +531,6 @@ export default function ChatPage() {
         )}
       </div>
 
-      {/* New chat modal */}
       {showNewChat && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-[#161616] rounded-2xl w-full max-w-md p-6 shadow-2xl">
@@ -554,7 +556,10 @@ export default function ChatPage() {
                     {(u.display_name || u.username)?.[0]?.toUpperCase()}
                   </div>
                   <div className="text-left">
-                    <p className="font-medium">{u.display_name || u.username}</p>
+                    <p className="font-medium flex items-center">
+                      {u.display_name || u.username}
+                      {u.is_official && <OfficialBadge />}
+                    </p>
                     <p className="text-xs text-gray-500">@{u.username}</p>
                   </div>
                 </button>
