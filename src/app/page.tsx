@@ -5,6 +5,9 @@ import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 
+const FOUNDER_EMAIL = "justin@stella-host.de";
+const OFFICIAL_ROOM_NAME = "Rulv Official";
+
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
@@ -15,6 +18,37 @@ export default function AuthPage() {
   const router = useRouter();
   const supabase = createClient();
 
+  const ensureOfficialRoomAndJoin = async (userId: string) => {
+    // Find or create the official Rulv room
+    let { data: room } = await supabase
+      .from("rooms")
+      .select("id")
+      .eq("name", OFFICIAL_ROOM_NAME)
+      .eq("is_group", true)
+      .maybeSingle();
+
+    if (!room) {
+      const { data: newRoom } = await supabase
+        .from("rooms")
+        .insert({
+          name: OFFICIAL_ROOM_NAME,
+          is_group: true,
+          created_by: userId,
+        })
+        .select()
+        .single();
+      room = newRoom;
+    }
+
+    if (room) {
+      // Join the official room (ignore if already member)
+      await supabase.from("room_members").upsert(
+        { room_id: room.id, user_id: userId },
+        { onConflict: "room_id,user_id" }
+      );
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -22,11 +56,25 @@ export default function AuthPage() {
 
     try {
       if (isLogin) {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data, error } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
         if (error) throw error;
+
+        if (data.user) {
+          // Ensure founder is marked official + everyone joins official room
+          const isFounder = data.user.email?.toLowerCase() === FOUNDER_EMAIL;
+          await supabase
+            .from("profiles")
+            .update({
+              is_official: isFounder,
+              role: isFounder ? "founder" : "user",
+            })
+            .eq("id", data.user.id);
+
+          await ensureOfficialRoomAndJoin(data.user.id);
+        }
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -35,11 +83,18 @@ export default function AuthPage() {
         if (error) throw error;
 
         if (data.user) {
+          const isFounder = email.toLowerCase() === FOUNDER_EMAIL;
+
           await supabase.from("profiles").insert({
             id: data.user.id,
             username: username.toLowerCase().replace(/\s/g, "_"),
             display_name: username,
+            is_official: isFounder,
+            role: isFounder ? "founder" : "user",
           });
+
+          // Auto-join official Rulv server
+          await ensureOfficialRoomAndJoin(data.user.id);
         }
       }
       router.push("/chat");
